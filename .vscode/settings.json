@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "shoot.h": "c",
+        "xinu.h": "c",
+        "playerimage.h": "c",
+        "enemy.h": "c",
+        "mylib.h": "c",
+        "gameover.h": "c",
+        "titlescreen.h": "c"
+    },
+    "vsintellicode.typescript.completionsEnabled": false,
+    "vsintellicode.sql.completionsEnabled": false,
+    "vsintellicode.python.completionsEnabled": false
+}
