@@ -35,7 +35,7 @@ typedef unsigned short u16;
 #define BUTTON_B		0x25 
 #define BUTTON_SELECT	0x03
 #define BUTTON_START	0x2c
-#define BUTTON_RIGHT	0x1f
+#define BUTTON_RIGHT	0x20
 #define BUTTON_LEFT		0x1e	
 #define BUTTON_UP	'w'
 #define BUTTON_DOWN 's'	
@@ -114,23 +114,29 @@ void score_up()
 	send(pid_score, 0);
 }
 
+void destroy_obj(struct Object_t* obj)
+{
+	drawRect(obj->x, obj->y, obj_sheet[obj->type].w, obj_sheet[obj->type].h, BLACK);
+	obj->state = INACTIVE;
+}
+
 void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, uint32* curr_shoot)
 {
 	struct Object_t* player = &objects[player_index];
 
-	if (KEY_DOWN_NOW(BUTTON_LEFT) && (player->x > 0)) {
+	if (check_key(BUTTON_LEFT) && (player->x > 0)) {
 		player->x -= playerspeed;
 	}
-	if (KEY_DOWN_NOW(BUTTON_RIGHT) && (player->x <= 216)) {
+	if (check_key(BUTTON_RIGHT) && (player->x <= 216)) {
 		player->x += playerspeed;
 	}
-	if (KEY_DOWN_NOW(BUTTON_UP) && (player->y > 25)) {
+	if (check_key(BUTTON_UP) && (player->y > 25)) {
 		player->y -= playerspeed;
 	}
-	if (KEY_DOWN_NOW(BUTTON_DOWN) && (player->y <= 136)) {
+	if (check_key(BUTTON_DOWN) && (player->y <= 136)) {
 		player->y += playerspeed;
 	}
-	if (KEY_DOWN_NOW(BUTTON_A)) {
+	if (check_key(BUTTON_A)) {
 		struct Object_t* shoot = &objects[shoots_index+*curr_shoot]; 
 		if (shoot->state == INACTIVE) {
 			shoot->state = ACTIVE;
@@ -147,6 +153,8 @@ void drawObjects(struct Object_t* obj, uint32 size)
 {
 	for(int i=0; i<size; i++)
 	{
+		if(obj[i].state==INACTIVE)
+			continue;
 		struct obj_data data = obj_sheet[obj[i].type]; 
 		drawImage3(obj[i].x, obj[i].y, data.w, data.h, obj_sheet[obj[i].type].image);
 		drawHollowRectSize(obj[i].x, obj[i].y, data.w, data.h, BLACK, data.speed);
@@ -180,6 +188,8 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 { 
 	for(int i=player_index+1; i<shoots_index; i++) 
 	{
+		if(obj[i].state==INACTIVE)
+			continue;
 		struct obj_data data = obj_sheet[obj[i].type]; 
 		obj[i].y += data.speed;
 		if(obj[i].y > 160)
@@ -195,8 +205,21 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 		
 		struct obj_data data = obj_sheet[obj[i].type];
 		obj[i].y -= data.speed;
-		if(obj[i].y < 0)
-			obj[i].state = INACTIVE;  
+		if(obj[i].y > 160) {
+			obj[i].y = 0;
+			destroy_obj(&obj[i]);
+			continue;
+		}
+
+		for(int j=player_index+1; j<shoots_index; j++) 
+		{
+			if(obj[j].state==ACTIVE)
+				if(collision(obj[j], obj[i])) {
+					destroy_obj(&obj[i]);
+					destroy_obj(&obj[j]);
+					score_up();
+				}
+		}
 	}	
 }
 
@@ -340,7 +363,7 @@ int galaga_game() {
 			}	
 			//space enemies apart
 			if ((hardEnemies[a].enemyY >= 200) && (easyEnemies[a].enemyY <=45)) {
-				hardEnemies[a].enemyY = 160;
+				hardEnemies[a].enemyY = 160;pero decidimos 
 			}		
 			if ((easyEnemies[a].enemyY >= 120) && (hardEnemies[a].enemyY >=170)) {
 				hardEnemies[a].enemyY = 160;
@@ -354,7 +377,7 @@ int galaga_game() {
 	//		//endGame();
 	//	}		
 //RAFA		fast.fastX += fastXSpeed;
-//RAFA		fast.fastY += fastYSpeed;
+//RAFA		fast.fastY += fastYSpeed;pero decidimos 
 		if (fast.fastX >= 240) {
 			fast.fastX = 0;
 		}
