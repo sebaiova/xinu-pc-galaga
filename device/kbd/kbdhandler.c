@@ -6,7 +6,7 @@
 #include <keyboard.h>
 
 unsigned char tecla_actual;
-long long keys_states;
+unsigned long long keys_states = 0ULL;
 
 unsigned char get_scancode()
 {
@@ -15,6 +15,10 @@ unsigned char get_scancode()
     return inputdata;
 }
 
+int check_key(unsigned char key)
+{
+	return (keys_states >> key) & 1ULL;
+}
 
 /*------------------------------------------------------------------------
  *  kbdhandler  -  Handle an interrupt for the keyboard device
@@ -29,10 +33,10 @@ void kbdhandler(void)
 
 	scancode = get_scancode();
 
-	//if(scancode < 0x80)
-	//	keys_states <
-
-
+	if(scancode < 0x80)
+		keys_states |= (1ULL << scancode);
+	else 
+		keys_states &= ~(1ULL << (scancode-0x80));
 
 	tecla_actual = scancode;
 	sprintf(t, "kbd: 0x%x     ", scancode);
