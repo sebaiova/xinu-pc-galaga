@@ -6,7 +6,10 @@
         "enemy.h": "c",
         "mylib.h": "c",
         "gameover.h": "c",
-        "titlescreen.h": "c"
+        "titlescreen.h": "c",
+        "boss.h": "c",
+        "easyimage.h": "c",
+        "hardimage.h": "c"
     },
     "vsintellicode.typescript.completionsEnabled": false,
     "vsintellicode.sql.completionsEnabled": false,

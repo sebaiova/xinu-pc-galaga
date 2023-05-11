@@ -1,7 +1,8 @@
 #include <xinu.h>
 #include "titlescreen.h"
 #include "playerImage.h"
-#include "enemy.h"
+#include "easyImage.h"
+#include "hardImage.h"
 #include "boss.h"
 #include "gameover.h"
 #include "shoot.h"
@@ -45,11 +46,13 @@ typedef unsigned short u16;
 #define KEY_DOWN_NOW(key)  (tecla_actual == key)
 
 //variable definitions
-#define playerspeed 2
-#define enemyspeed 1
+#define PLAYER_SPEED 2
+#define ENEMY_SPEED 1
 #define fastXSpeed 3
 #define fastYSpeed 2
-
+#define SHOOT_SPEED 4
+#define SHOOT_FREQUENCY 6
+#define INMUNITY_TIME 30
 
 void setPixel(int x, int y, u16 color);
 void drawRect(int x, int y, int width, int height, u16 color);
@@ -64,19 +67,20 @@ void initialize();
 void drawEnemies();
 void endGame();
 
-struct obj_data {
+struct ObjectData_t {
 	const u16* image;
 	uint8 w, h, speed;
 };
 
-enum ObjectState { INACTIVE, ACTIVE }; 
-
+enum ObjectState { INACTIVE, ACTIVE, INMUNE = INMUNITY_TIME }; 
 enum ObjectType  { PLAYER, ENEMY_EASY, ENEMY_HARD, SHOOT } ;
-struct obj_data obj_sheet[] = {  
-	{ playerImage, PLAYER_WIDTH,	PLAYER_HEIGHT,	playerspeed },  
-  	{ enemyImage,  ENEMY_WIDTH, 	ENEMY_HEIGHT,	enemyspeed  },
-	{ enemyImage,  ENEMY_WIDTH, 	ENEMY_HEIGHT,	enemyspeed  },
-	{ shootImage,  SHOOT_WIDTH,		SHOOT_HEIGHT,   2 }
+
+const struct ObjectData_t obj_sheet[] = {  
+	/* Type				Sprite		   Width			Height		  Speed       */
+	/*[PLAYER]*/	{ playerImage,	PLAYER_WIDTH,	PLAYER_HEIGHT,	PLAYER_SPEED },  
+	/*[ENEMY_EASY]*/{ easyImage,  	EASY_WIDTH, 	EASY_HEIGHT,	ENEMY_SPEED  },
+	/*[ENEMY_HARD]*/{ hardImage,  	HARD_WIDTH, 	HARD_HEIGHT,	ENEMY_SPEED  },
+	/*[SHOOT]*/		{ shootImage,  	SHOOT_WIDTH,	SHOOT_HEIGHT,   SHOOT_SPEED  }
 };
 
 //objects
@@ -106,12 +110,25 @@ pid32 pid_control;
 
 int score;
 int lives;
+int shoot_decay;
 char buffer[32];
 
 void score_up() 
 {
 	score++;
 	send(pid_score, 0);
+}
+
+void struck(struct Object_t* player, struct Object_t* enemy)
+{
+	if(--lives==0)
+		endGame();
+	else 
+	{
+		destroy_obj(enemy);
+		player->state = INMUNE;
+		send(pid_score, 0);
+	}
 }
 
 void destroy_obj(struct Object_t* obj)
@@ -125,20 +142,22 @@ void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, u
 	struct Object_t* player = &objects[player_index];
 
 	if (check_key(BUTTON_LEFT) && (player->x > 0)) {
-		player->x -= playerspeed;
+		player->x -= PLAYER_SPEED;
 	}
 	if (check_key(BUTTON_RIGHT) && (player->x <= 216)) {
-		player->x += playerspeed;
+		player->x += PLAYER_SPEED;
 	}
 	if (check_key(BUTTON_UP) && (player->y > 25)) {
-		player->y -= playerspeed;
+		player->y -= PLAYER_SPEED;
 	}
 	if (check_key(BUTTON_DOWN) && (player->y <= 136)) {
-		player->y += playerspeed;
+		player->y += PLAYER_SPEED;
 	}
-	if (check_key(BUTTON_A)) {
+	if (check_key(BUTTON_A) && shoot_decay==0) {
 		struct Object_t* shoot = &objects[shoots_index+*curr_shoot]; 
-		if (shoot->state == INACTIVE) {
+		if (shoot->state == INACTIVE) 
+		{
+			shoot_decay = SHOOT_FREQUENCY;
 			shoot->state = ACTIVE;
 			shoot->x = player->x+9; /* 24 widht player */
 			shoot->y = player->y; 
@@ -153,12 +172,16 @@ void drawObjects(struct Object_t* obj, uint32 size)
 {
 	for(int i=0; i<size; i++)
 	{
-		if(obj[i].state==INACTIVE)
-			continue;
-		struct obj_data data = obj_sheet[obj[i].type]; 
-		drawImage3(obj[i].x, obj[i].y, data.w, data.h, obj_sheet[obj[i].type].image);
-		drawHollowRectSize(obj[i].x, obj[i].y, data.w, data.h, BLACK, data.speed);
-	}	
+		struct ObjectData_t data = obj_sheet[obj[i].type]; 
+		if(obj[i].state>=ACTIVE)
+		{
+			if((obj[i].state%2)==0)
+				drawRect(obj[i].x, obj[i].y, data.w, data.h, BLACK);	
+			else 
+				drawImage3(obj[i].x, obj[i].y, data.w, data.h, obj_sheet[obj[i].type].image);
+			drawHollowRectSize(obj[i].x, obj[i].y, data.w, data.h, BLACK, data.speed);
+		}
+	}
 }
 
 #define spawn(x, y, type, state) obj[index++] = (struct Object_t){x, y, type, state};  
@@ -167,15 +190,18 @@ void initializeObjects(struct Object_t* obj, uint32 size)
 	uint32 index = 0;
 	spawn(120, 136, PLAYER, ACTIVE);  
 	for(int i=0; i<9; i++)
-		spawn(28*i, 40, ENEMY_EASY, ACTIVE);
+	{	
+		spawn(28*i, 40,  ENEMY_EASY, ACTIVE);
+		spawn(28*i, 200, ENEMY_HARD, ACTIVE);
+	}	
 	for(int i=0; i<10; i++)
 		spawn(0, 0, SHOOT, INACTIVE);
 }
 
 int collision(struct Object_t obj1, struct Object_t obj2)
 {
-	struct obj_data data1 = obj_sheet[obj1.type];
-	struct obj_data data2 = obj_sheet[obj2.type]; 
+	struct ObjectData_t data1 = obj_sheet[obj1.type];
+	struct ObjectData_t data2 = obj_sheet[obj2.type]; 
 
 	if( obj1.x < obj2.x + data2.w && obj1.x + data1.w > obj2.x &&
 		obj1.y < obj2.y + data2.h && obj1.y + data1.h > obj2.y )
@@ -184,53 +210,71 @@ int collision(struct Object_t obj1, struct Object_t obj2)
 	return 0;
 }
 
+#define forEach_enemyIndex(i) for(int i=player_index+1; i<shoots_index; i++)
+#define forEach_shootIndex(i) for(int i=shoots_index; i<size; i++)
 void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint32 size)
 { 
-	for(int i=player_index+1; i<shoots_index; i++) 
+	struct Object_t* player = &obj[player_index];
+
+	if(shoot_decay>0)
+		shoot_decay--;
+
+	// INMUNITY DECAY
+	if(player->state>ACTIVE)	
+		obj->state--;
+
+	forEach_enemyIndex(i) 
 	{
-		if(obj[i].state==INACTIVE)
-			continue;
-		struct obj_data data = obj_sheet[obj[i].type]; 
-		obj[i].y += data.speed;
+		obj[i].y += obj_sheet[obj[i].type].speed;
 		if(obj[i].y > 160)
 			obj[i].y = 0; 
-		if(collision(obj[i], obj[player_index]))
-			endGame();
 	}	
-
-	for(int i=shoots_index; i<size; i++)
-	{
-		if(obj[i].state==INACTIVE)
-			continue;
-		
-		struct obj_data data = obj_sheet[obj[i].type];
-		obj[i].y -= data.speed;
-		if(obj[i].y > 160) {
-			obj[i].y = 0;
-			destroy_obj(&obj[i]);
-			continue;
-		}
-
-		for(int j=player_index+1; j<shoots_index; j++) 
+	if(player->state==ACTIVE)
+	{	
+		forEach_enemyIndex(i)
 		{
-			if(obj[j].state==ACTIVE)
-				if(collision(obj[j], obj[i])) {
+			if(obj[i].state==ACTIVE)
+			{	
+				if(collision(obj[i], obj[player_index]))
+				{	
+					struck(&obj[player_index], &obj[i]);
+					break;
+				}	
+			}		
+		}	
+	}
+	forEach_shootIndex(i)
+	{
+		if(obj[i].state==ACTIVE)
+		{
+			forEach_enemyIndex(j)
+			{
+				if(obj[j].state==ACTIVE && collision(obj[j], obj[i]))
+				{
 					destroy_obj(&obj[i]);
 					destroy_obj(&obj[j]);
 					score_up();
 				}
-		}
+			}
+			struct ObjectData_t data = obj_sheet[obj[i].type];
+			obj[i].y -= data.speed;
+			if(obj[i].y > 160) 
+			{
+				obj[i].y = 0;
+				destroy_obj(&obj[i]);
+			}
+		}	
 	}	
 }
 
-
-int galaga_game() {
-
+int galaga_game() 
+{
 	uint32 curr_shoot = 0;
+	shoot_decay = 0;
 	score = 0;
 	lives = 3;
 
-	struct Object_t objects[20]; 
+	struct Object_t objects[29]; 
 	initializeObjects(objects, sizeof(objects)/sizeof(struct Object_t));
 	
 	//easy enemy wave set setup
@@ -262,7 +306,8 @@ int galaga_game() {
 	print_text_on_vga(10, 20, "GALAGA ");
 	drawImage3(0, 0, 240, 160, titlescreen);
 
-	while(1) {
+	while(1) 
+	{
 		if (KEY_DOWN_NOW(BUTTON_START)) {
 			break;
 		}
@@ -283,8 +328,8 @@ int galaga_game() {
 			galaga_game();
 		}
 
-		input(objects, 0, 10, &curr_shoot);
-		update(objects, 0, 10, sizeof(objects)/sizeof(struct Object_t));
+		input(objects, 0, 19, &curr_shoot);
+		update(objects, 0, 19, sizeof(objects)/sizeof(struct Object_t));
 
 		//player shots 
 	//	if (KEY_DOWN_NOW(BUTTON_A)) {
@@ -308,7 +353,7 @@ int galaga_game() {
 		//if (KEY_DOWN_NOW(BUTTON_DOWN) && (player.playerY <= 136)) {
 		//	player.playerY += playerspeed;
 		//}
-		waitForVBlank();
+		//waitForVBlank();
 		sleepms(50);
 		//draw player
 	//	drawImage3(player.playerX, player.playerY, 24, 24, playerImage);
@@ -349,8 +394,8 @@ int galaga_game() {
 		
 		//draw hard enemies
 		for (int a = 0; a < 9; a++) {
-			hardEnemies[a].enemyY += enemyspeed;
-			drawImage3(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, enemyImage);
+			hardEnemies[a].enemyY += ENEMY_SPEED;
+			drawImage3(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, hardImage);
 			drawRect(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, RGB(31, 0, 31));
 	//		if (collision(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, player.playerX, player.playerY)) {
 	//			endGame();
@@ -363,7 +408,7 @@ int galaga_game() {
 			}	
 			//space enemies apart
 			if ((hardEnemies[a].enemyY >= 200) && (easyEnemies[a].enemyY <=45)) {
-				hardEnemies[a].enemyY = 160;pero decidimos 
+				hardEnemies[a].enemyY = 160; 
 			}		
 			if ((easyEnemies[a].enemyY >= 120) && (hardEnemies[a].enemyY >=170)) {
 				hardEnemies[a].enemyY = 160;
@@ -377,7 +422,7 @@ int galaga_game() {
 	//		//endGame();
 	//	}		
 //RAFA		fast.fastX += fastXSpeed;
-//RAFA		fast.fastY += fastYSpeed;pero decidimos 
+//RAFA		fast.fastY += fastYSpeed;
 		if (fast.fastX >= 240) {
 			fast.fastX = 0;
 		}
@@ -390,44 +435,13 @@ int galaga_game() {
 	return 0;
 }
 
-//int collision(u16 enemyX, u16 enemyY, u16 enemyWidth, u16 enemyHeight, u16 playerX, u16 playerY) {
-//	//check if bottom right corner of enemy is within player
-//	if (((enemyX + enemyWidth) > playerX) && ( (enemyY + enemyHeight) 
-//		> playerY ) &&  ((enemyX + enemyWidth) < (playerX + 24)) 
-//		&& ((enemyY + enemyWidth) < (playerY + 24))) {
-//		return 1;
-//	} 
-//	//check bottom left corner of enemy
-//	if ( (enemyX < (playerX + 24)) 
-//		&& (enemyX > playerX)
-//		&& ((enemyY + enemyHeight) > playerY)
-//		&& ((enemyY + enemyHeight) < (playerY + 24))
-//		) {
-//		return 1;
-//	}
-//	//check top left corner
-//	if ( (enemyX < (playerX + 24)) 
-//		&& (enemyX > playerX)
-//		&& (enemyY > playerY)
-//		&& (enemyY < (playerY + 24))
-//		) {
-//		return 1;
-//	}	
-//	//check top right corner
-//	if ( ((enemyX + enemyWidth) < (playerX + 24)) 
-//		&& ((enemyX + enemyWidth) > playerX)
-//		&& (enemyY > playerY)
-//		&& (enemyY < (playerY + 24))
-//		) {
-//		return 1;
-//	}	
-//	return 0;
-//}
-
-void endGame() {
+void endGame()
+{
 	//start Game Over State
 	drawImage3(0, 0, 240, 160, gameover);
 	drawHollowRect(0, 0, 240, 160, WHITE);
+	send(pid_score, 0);
+
 	while(1) {
 		if (KEY_DOWN_NOW(BUTTON_SELECT)) {
 			galaga_game();
@@ -438,7 +452,8 @@ void endGame() {
 	}
 }
 
-int galaga_score() {
+int galaga_score()
+{
 	while(1){
 		receive();
  		sprintf(buffer, "Vidas: %d    Score: %d", lives, score);
@@ -446,13 +461,14 @@ int galaga_score() {
 	}
 }
 
-int galaga(){
-
+int galaga()
+{
 	pid_game = create(galaga_game, 1024, 20, "Galaga Game", 0);
 	pid_score = create(galaga_score, 1024, 20, "Galaga Score", 0);
 	pid_control = currpid;
 	resume(pid_game);
 	resume(pid_score);
+
 	while(receive()!=BUTTON_ESC);
 
 	kill(pid_game);
