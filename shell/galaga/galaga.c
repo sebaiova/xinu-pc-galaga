@@ -3,34 +3,15 @@
 #include "playerImage.h"
 #include "easyImage.h"
 #include "hardImage.h"
-#include "boss.h"
+#include "bossImage.h"
 #include "gameover.h"
 #include "shoot.h"
 
 extern unsigned char tecla_actual;
 typedef unsigned short u16;
 #define RGB(r, g, b) (r | (g << 5) | (b << 10))
-// #define REG_DISPCNT *(u16 *)0x4000000
-#define extern videoBuffer
-#define MODE3 3
-#define BG2_ENABLE (1 << 10)
 #define WHITE RGB(31, 31, 31)
 #define BLACK RGB(0, 0, 0)
-
-/*
-#define BUTTON_A		(1<<0)
-#define BUTTON_B		(1<<1)
-#define BUTTON_SELECT	(1<<2)
-#define BUTTON_START	(1<<3)
-#define BUTTON_RIGHT	(1<<4)
-#define BUTTON_LEFT		(1<<5)
-#define BUTTON_UP		(1<<6)
-#define BUTTON_DOWN		(1<<7)
-#define BUTTON_R		(1<<8)
-#define BUTTON_L		(1<<9)
-#define KEY_DOWN_NOW(key)  (~(BUTTONS) & key)
-*/
-//#define BUTTONS *(volatile unsigned int *)0x4000130
 
 #define BUTTON_A		0x24
 #define BUTTON_B		0x25 
@@ -38,8 +19,8 @@ typedef unsigned short u16;
 #define BUTTON_START	0x2c
 #define BUTTON_RIGHT	0x20
 #define BUTTON_LEFT		0x1e	
-#define BUTTON_UP	'w'
-#define BUTTON_DOWN 's'	
+#define BUTTON_UP		0x11
+#define BUTTON_DOWN 	0x1f
 #define BUTTON_R	'1'
 #define BUTTON_L	'2'
 #define BUTTON_ESC		0x01
@@ -48,11 +29,16 @@ typedef unsigned short u16;
 //variable definitions
 #define PLAYER_SPEED 2
 #define ENEMY_SPEED 1
-#define fastXSpeed 3
-#define fastYSpeed 2
 #define SHOOT_SPEED 4
 #define SHOOT_FREQUENCY 6
 #define INMUNITY_TIME 30
+
+#define N_SHOOTS 10
+#define N_EASY 9
+#define N_HARD 9
+#define N_BOSS 3
+#define N_ENEMIES N_EASY+N_HARD+N_BOSS
+#define N_OBJECTS 1+N_SHOOTS+N_ENEMIES
 
 void setPixel(int x, int y, u16 color);
 void drawRect(int x, int y, int width, int height, u16 color);
@@ -63,8 +49,6 @@ void delay_galaga();
 void waitForVBlank();
 
 //helpers
-void initialize();
-void drawEnemies();
 void endGame();
 
 struct ObjectData_t {
@@ -73,13 +57,14 @@ struct ObjectData_t {
 };
 
 enum ObjectState { INACTIVE, ACTIVE, INMUNE = INMUNITY_TIME }; 
-enum ObjectType  { PLAYER, ENEMY_EASY, ENEMY_HARD, SHOOT } ;
+enum ObjectType  { PLAYER, ENEMY_EASY, ENEMY_HARD, ENEMY_BOSS, SHOOT } ;
 
 const struct ObjectData_t obj_sheet[] = {  
 	/* Type				Sprite		   Width			Height		  Speed       */
 	/*[PLAYER]*/	{ playerImage,	PLAYER_WIDTH,	PLAYER_HEIGHT,	PLAYER_SPEED },  
 	/*[ENEMY_EASY]*/{ easyImage,  	EASY_WIDTH, 	EASY_HEIGHT,	ENEMY_SPEED  },
 	/*[ENEMY_HARD]*/{ hardImage,  	HARD_WIDTH, 	HARD_HEIGHT,	ENEMY_SPEED  },
+	/*[ENEMY_BOSS]*/{ bossImage,  	BOSS_WIDTH, 	BOSS_HEIGHT,	ENEMY_SPEED   },
 	/*[SHOOT]*/		{ shootImage,  	SHOOT_WIDTH,	SHOOT_HEIGHT,   SHOOT_SPEED  }
 };
 
@@ -88,27 +73,14 @@ struct Object_t {
 	uint8 x, y, type, state;
 };
 
-struct Players {
-	volatile u16 playerX;
-	volatile u16 playerY;
-};
-struct Enemy {
-	volatile u16 enemyX;
-	volatile u16 enemyY;
-};
-struct FastEnemy {
-	volatile u16 fastX;
-	volatile u16 fastY;
-};
-
-#define N_SHOOTS 10
-int shoots[N_SHOOTS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
 pid32 pid_game;
 pid32 pid_score;
 pid32 pid_control;
 
+int frame_time;
+int running;
 int score;
+int score_at_lvl;
 int lives;
 int shoot_decay;
 char buffer[32];
@@ -116,6 +88,7 @@ char buffer[32];
 void score_up() 
 {
 	score++;
+	score_at_lvl++;
 	send(pid_score, 0);
 }
 
@@ -125,6 +98,7 @@ void struck(struct Object_t* player, struct Object_t* enemy)
 		endGame();
 	else 
 	{
+		score_up();
 		destroy_obj(enemy);
 		player->state = INMUNE;
 		send(pid_score, 0);
@@ -159,8 +133,8 @@ void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, u
 		{
 			shoot_decay = SHOOT_FREQUENCY;
 			shoot->state = ACTIVE;
-			shoot->x = player->x+9; /* 24 widht player */
-			shoot->y = player->y; 
+			shoot->x = player->x+(PLAYER_WIDTH/2)-(SHOOT_WIDTH/2); /* 24 widht player */
+			shoot->y = player->y-SHOOT_HEIGHT; 
 			(*curr_shoot)++;
 			if (*curr_shoot >= N_SHOOTS)
 				*curr_shoot = 0;
@@ -191,9 +165,15 @@ void initializeObjects(struct Object_t* obj, uint32 size)
 	spawn(120, 136, PLAYER, ACTIVE);  
 	for(int i=0; i<9; i++)
 	{	
-		spawn(28*i, 40,  ENEMY_EASY, ACTIVE);
-		spawn(28*i, 200, ENEMY_HARD, ACTIVE);
-	}	
+		spawn(28*i, 80,  ENEMY_EASY, ACTIVE);
+		spawn(28*i, 40, ENEMY_HARD, ACTIVE);
+	}
+
+	for(int i=0; i<3; i++)
+	{
+		spawn(i*80, 0,  ENEMY_BOSS, ACTIVE);
+	}
+
 	for(int i=0; i<10; i++)
 		spawn(0, 0, SHOOT, INACTIVE);
 }
@@ -225,9 +205,16 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 
 	forEach_enemyIndex(i) 
 	{
-		obj[i].y += obj_sheet[obj[i].type].speed;
+		struct ObjectData_t data = obj_sheet[obj[i].type]; 
+		obj[i].y += data.speed;
 		if(obj[i].y > 160)
-			obj[i].y = 0; 
+			obj[i].y = 0;
+		if(obj[i].type==ENEMY_BOSS)
+		{
+			obj[i].x += data.speed;
+			if(obj[i].x > 240)
+				obj[i].x = 0;
+		}
 	}	
 	if(player->state==ACTIVE)
 	{	
@@ -251,8 +238,12 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 			{
 				if(obj[j].state==ACTIVE && collision(obj[j], obj[i]))
 				{
+					if(obj[j].type == ENEMY_HARD)
+						obj[j].type = ENEMY_EASY;
+					else
+						destroy_obj(&obj[j]);
+
 					destroy_obj(&obj[i]);
-					destroy_obj(&obj[j]);
 					score_up();
 				}
 			}
@@ -260,7 +251,7 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 			obj[i].y -= data.speed;
 			if(obj[i].y > 160) 
 			{
-				obj[i].y = 0;
+				obj[i].y = 3;
 				destroy_obj(&obj[i]);
 			}
 		}	
@@ -269,169 +260,58 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 
 int galaga_game() 
 {
-	uint32 curr_shoot = 0;
-	shoot_decay = 0;
-	score = 0;
-	lives = 3;
-
-	struct Object_t objects[29]; 
-	initializeObjects(objects, sizeof(objects)/sizeof(struct Object_t));
-	
-	//easy enemy wave set setup
-	struct Enemy easyEnemies[9];
-	for (int a = 0; a < 9; a++) {
-		easyEnemies[a].enemyX = (28*a);
-		easyEnemies[a].enemyY = 200;
-	} 
-
-	//difficult enemies setup
-	struct Enemy hardEnemies[9];
-	for (int a = 0; a < 9; a++) {
-		hardEnemies[a].enemyX = (28*a);
-		hardEnemies[a].enemyY = 160;
-	} 
-	hardEnemies[3].enemyX = 240;
-	hardEnemies[6].enemyX = 240;
-	//player setup
-	struct Players player;
-	player.playerX = 120;
-	player.playerY = 136;
-	//fast enemy "boss" setup
-	struct FastEnemy fast;
-	fast.fastX = 0;
-	fast.fastY = 30;
-
-	// REG_DISPCNT = MODE3 | BG2_ENABLE;
-	//initalize title screen
-	print_text_on_vga(10, 20, "GALAGA ");
-	drawImage3(0, 0, 240, 160, titlescreen);
-
-	while(1) 
+	struct Object_t objects[N_OBJECTS];
+	while(1)
 	{
-		if (KEY_DOWN_NOW(BUTTON_START)) {
-			break;
-		}
-		if (KEY_DOWN_NOW(BUTTON_ESC)){
-			send(pid_control, BUTTON_ESC);
-		} 
-	}	
-	//start black screen for drawing
-	for (int i = 0; i < 240; i++) {
-		for (int j = 0; j < 160; j++) {
-			setPixel(i, j, BLACK);
-		}
-	}	
-	while(1) {
-		//go back to title screen if select button is pressed
-		if (KEY_DOWN_NOW(BUTTON_SELECT)) {
-			//initialize();
-			galaga_game();
-		}
-
-		input(objects, 0, 19, &curr_shoot);
-		update(objects, 0, 19, sizeof(objects)/sizeof(struct Object_t));
-
-		//player shots 
-	//	if (KEY_DOWN_NOW(BUTTON_A)) {
-	//		if (shoots[curr_shot] == 0) {
-	//			shoots[curr_shot] = 136*240 + player.playerX+9; /* 24 widht player */
-	//			curr_shot++;
-	//			if (curr_shot >= N_SHOOTS)
-	//				curr_shot = 0;
-	//		};
-	//	}
-		//player movement input
-		//if (KEY_DOWN_NOW(BUTTON_LEFT) && (player.playerX > 0)) {
-		//	player.playerX -= playerspeed;
-		//}
-		//if (KEY_DOWN_NOW(BUTTON_RIGHT) && (player.playerX <= 216)) {
-		//	player.playerX += playerspeed;
-		//}
-		//if (KEY_DOWN_NOW(BUTTON_UP) && (player.playerY > 25)) {
-		//	player.playerY -= playerspeed;
-		//}
-		//if (KEY_DOWN_NOW(BUTTON_DOWN) && (player.playerY <= 136)) {
-		//	player.playerY += playerspeed;
-		//}
-		//waitForVBlank();
-		sleepms(50);
-		//draw player
-	//	drawImage3(player.playerX, player.playerY, 24, 24, playerImage);
-	//	drawHollowRect(player.playerX - 1, player.playerY - 1, 26, 26, BLACK);
-	//	drawHollowRect(player.playerX - 2, player.playerY - 2, 28, 28, BLACK);
-		//draw easy enemies with downward movement
-	//	for (int a = 0; a < 9; a++) {
-	//		easyEnemies[a].enemyY += enemyspeed;
-	//	//	drawImage3(easyEnemies[a].enemyX, easyEnemies[a].enemyY, 20, 20, enemyImage);
-	//		if (collision(easyEnemies[a].enemyX, easyEnemies[a].enemyY, 20, 20, player.playerX, player.playerY)) {
-	//			endGame();
-	//		}	
-	//		if (easyEnemies[a].enemyY >= 160) {
-	//			easyEnemies[a].enemyY = 0;
-	//		}		
-	//	}
-
-		//draw shots
-	//	for (int i = 0; i < N_SHOOTS; i++) {
-	//		if (shoots[i] != 0) {
-	//			drawRect((shoots[i] % 240), (shoots[i] / 240)+4, 5, 5, BLACK);
-	//			drawImage3((shoots[i] % 240), (shoots[i] / 240), 5, 5, shootImage);
-	//			shoots[i] = shoots[i]-240*4;
-	//			if (shoots[i] <=0)   shoots[i]=0;
-	//		}
-
-			// check hits of shoots
-	//		for (int j = 0; j < 9; j++) {
-	//			if (collision(easyEnemies[j].enemyX, easyEnemies[j].enemyY, 15, 15, shoots[i] % 240, shoots[i] / 240)) {
-	//				drawRect(easyEnemies[j].enemyX, easyEnemies[j].enemyY,  20, 20, BLACK);
-	//				drawRect((shoots[i] % 240), (shoots[i] / 240)+4, 5, 5, BLACK);
-	//				easyEnemies[j].enemyY = 0;
-	//				shoots[i] = 0;
-	//				score_up();
-	//			}
-	//		}
-	//	}
-		
-		//draw hard enemies
-		for (int a = 0; a < 9; a++) {
-			hardEnemies[a].enemyY += ENEMY_SPEED;
-			drawImage3(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, hardImage);
-			drawRect(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, RGB(31, 0, 31));
-	//		if (collision(hardEnemies[a].enemyX, hardEnemies[a].enemyY, 20, 20, player.playerX, player.playerY)) {
-	//			endGame();
-	//		}	
-			if (hardEnemies[a].enemyY >= 228) {
-				hardEnemies[a].enemyY = 0;
+		frame_time = 50;
+		drawImage3(0, 0, 240, 160, titlescreen);
+		while(1) 
+		{
+			if (KEY_DOWN_NOW(BUTTON_START)) {
+				break;
 			}
-			if ((hardEnemies[a].enemyY >= 200) && (easyEnemies[a].enemyY <=45)) {
-				hardEnemies[a].enemyY = 160;
-			}	
-			//space enemies apart
-			if ((hardEnemies[a].enemyY >= 200) && (easyEnemies[a].enemyY <=45)) {
-				hardEnemies[a].enemyY = 160; 
-			}		
-			if ((easyEnemies[a].enemyY >= 120) && (hardEnemies[a].enemyY >=170)) {
-				hardEnemies[a].enemyY = 160;
-			}							
+			if (KEY_DOWN_NOW(BUTTON_ESC)){
+				send(pid_control, BUTTON_ESC);
+			} 
 		}	
-		//draw fast enemy
-		drawImage3(fast.fastX, fast.fastY, 15, 15, boss);
-		drawHollowRect(fast.fastX - 1, fast.fastY - 1, 17, 17, BLACK);
-		drawHollowRect(fast.fastX - 2, fast.fastY - 2, 19, 19, BLACK);
-	//	if(collision(fast.fastX, fast.fastY, 15, 15, player.playerX, player.playerY)) {
-	//		//endGame();
-	//	}		
-//RAFA		fast.fastX += fastXSpeed;
-//RAFA		fast.fastY += fastYSpeed;
-		if (fast.fastX >= 240) {
-			fast.fastX = 0;
-		}
-		if (fast.fastY >= 200) {
-			fast.fastY = player.playerY - 20;
-		}
 
-		drawObjects(objects, sizeof(objects)/sizeof(struct Object_t));
+		shoot_decay = 0;
+		score = 0;
+		lives = 3;
+		running = TRUE;
+
+		start_level:
+
+		initializeObjects(objects, sizeof(objects)/sizeof(struct Object_t));
+		score_at_lvl = 0;
+		uint32 curr_shoot = 0;
+
+		//start black screen for drawing
+		for (int i = 0; i < 240; i++) {
+			for (int j = 0; j < 160; j++) {
+				setPixel(i, j, BLACK);
+			}
+		}	
+
+		while(running==TRUE) {
+			//go back to title screen if select button is pressed
+			if (KEY_DOWN_NOW(BUTTON_SELECT))
+				running=FALSE;
+
+			input(objects, 0, N_ENEMIES+1, &curr_shoot);
+			update(objects, 0, N_ENEMIES+1, sizeof(objects)/sizeof(struct Object_t));
+			drawObjects(objects, sizeof(objects)/sizeof(struct Object_t));
+
+			if(score_at_lvl>=30 && score_at_lvl>0)
+			{
+				frame_time -= 5;
+				goto start_level;
+			}
+
+			sleepms(frame_time);
+		}
 	}
+
 	return 0;
 }
 
@@ -442,14 +322,9 @@ void endGame()
 	drawHollowRect(0, 0, 240, 160, WHITE);
 	send(pid_score, 0);
 
-	while(1) {
-		if (KEY_DOWN_NOW(BUTTON_SELECT)) {
-			galaga_game();
-		}
-		if (KEY_DOWN_NOW(BUTTON_START))	{
-			galaga_game();
-		}
-	}
+	while(running==TRUE)
+		if(KEY_DOWN_NOW(BUTTON_START) || KEY_DOWN_NOW(BUTTON_SELECT) ) 
+			running = FALSE;
 }
 
 int galaga_score()
@@ -457,12 +332,15 @@ int galaga_score()
 	while(1){
 		receive();
  		sprintf(buffer, "Vidas: %d    Score: %d", lives, score);
+		
 		print_text_on_vga(4, 164, buffer);
 	}
 }
 
 int galaga()
 {
+	print_text_on_vga(10, 20, "GALAGA ");
+
 	pid_game = create(galaga_game, 1024, 20, "Galaga Game", 0);
 	pid_score = create(galaga_score, 1024, 20, "Galaga Score", 0);
 	pid_control = currpid;
@@ -473,4 +351,6 @@ int galaga()
 
 	kill(pid_game);
 	kill(pid_score);
+
+	return 0;
 }
