@@ -9,21 +9,22 @@
 
 extern unsigned char tecla_actual;
 typedef unsigned short u16;
-#define RGB(r, g, b) (r | (g << 5) | (b << 10))
-#define WHITE RGB(31, 31, 31)
-#define BLACK RGB(0, 0, 0)
 
-#define BUTTON_A		0x24
-#define BUTTON_B		0x25 
-#define BUTTON_SELECT	0x03
-#define BUTTON_START	0x2c
-#define BUTTON_RIGHT	0x20
-#define BUTTON_LEFT		0x1e	
-#define BUTTON_UP		0x11
-#define BUTTON_DOWN 	0x1f
+#define COLOR(r,g,b) (b<<11) | (g<<5) | r
+#define BLACK COLOR(0, 0, 0)
+#define YELLOW COLOR(31, 63, 0)
+#define WHITE COLOR(31, 63, 31)
+#define BUTTON_A		0x24 /*J*/
+#define BUTTON_B		0x25 /*K*/
+#define BUTTON_SELECT	0x03 /*2*/
+#define BUTTON_START	0x2c /*Z*/
+#define BUTTON_RIGHT	0x20 /*D*/
+#define BUTTON_LEFT		0x1e /*A*/	
+#define BUTTON_UP		0x11 /*W*/
+#define BUTTON_DOWN 	0x1f /*S*/
 #define BUTTON_R	'1'
 #define BUTTON_L	'2'
-#define BUTTON_ESC		0x01
+#define BUTTON_ESC		0x01 /*ESC*/
 #define KEY_DOWN_NOW(key)  (tecla_actual == key)
 
 //variable definitions
@@ -45,8 +46,6 @@ void drawRect(int x, int y, int width, int height, u16 color);
 void drawHollowRect(int x, int y, int width, int height, u16 color);
 void drawHollowRectSize(int x, int y, int width, int height, u16 color, int size);
 void drawImage3(int x, int y, int width, int height, const u16* image);
-void delay_galaga();
-void waitForVBlank();
 
 //helpers
 void endGame();
@@ -80,15 +79,13 @@ pid32 pid_control;
 int frame_time;
 int running;
 int score;
-int score_at_lvl;
 int lives;
+int enemies_left;
 int shoot_decay;
-char buffer[32];
 
 void score_up() 
 {
 	score++;
-	score_at_lvl++;
 	send(pid_score, 0);
 }
 
@@ -99,6 +96,7 @@ void struck(struct Object_t* player, struct Object_t* enemy)
 	else 
 	{
 		score_up();
+		enemies_left--;
 		destroy_obj(enemy);
 		player->state = INMUNE;
 		send(pid_score, 0);
@@ -163,18 +161,17 @@ void initializeObjects(struct Object_t* obj, uint32 size)
 {
 	uint32 index = 0;
 	spawn(120, 136, PLAYER, ACTIVE);  
-	for(int i=0; i<9; i++)
-	{	
+	
+	for(int i=0; i<N_EASY; i++)
 		spawn(28*i, 80,  ENEMY_EASY, ACTIVE);
+	
+	for(int i=0; i<N_HARD; i++)
 		spawn(28*i, 40, ENEMY_HARD, ACTIVE);
-	}
 
-	for(int i=0; i<3; i++)
-	{
+	for(int i=0; i<N_BOSS; i++)
 		spawn(i*80, 0,  ENEMY_BOSS, ACTIVE);
-	}
 
-	for(int i=0; i<10; i++)
+	for(int i=0; i<N_SHOOTS; i++)
 		spawn(0, 0, SHOOT, INACTIVE);
 }
 
@@ -240,16 +237,18 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 				{
 					if(obj[j].type == ENEMY_HARD)
 						obj[j].type = ENEMY_EASY;
-					else
+					else 
+					{
 						destroy_obj(&obj[j]);
-
+						enemies_left--;
+					}
 					destroy_obj(&obj[i]);
 					score_up();
 				}
 			}
 			struct ObjectData_t data = obj_sheet[obj[i].type];
 			obj[i].y -= data.speed;
-			if(obj[i].y > 160) 
+			if(obj[i].y > 160)
 			{
 				obj[i].y = 3;
 				destroy_obj(&obj[i]);
@@ -273,7 +272,7 @@ int galaga_game()
 			if (KEY_DOWN_NOW(BUTTON_ESC)){
 				send(pid_control, BUTTON_ESC);
 			} 
-		}	
+		}
 
 		shoot_decay = 0;
 		score = 0;
@@ -283,7 +282,7 @@ int galaga_game()
 		start_level:
 
 		initializeObjects(objects, sizeof(objects)/sizeof(struct Object_t));
-		score_at_lvl = 0;
+		enemies_left = N_ENEMIES;
 		uint32 curr_shoot = 0;
 
 		//start black screen for drawing
@@ -291,7 +290,7 @@ int galaga_game()
 			for (int j = 0; j < 160; j++) {
 				setPixel(i, j, BLACK);
 			}
-		}	
+		}
 
 		while(running==TRUE) {
 			//go back to title screen if select button is pressed
@@ -302,9 +301,9 @@ int galaga_game()
 			update(objects, 0, N_ENEMIES+1, sizeof(objects)/sizeof(struct Object_t));
 			drawObjects(objects, sizeof(objects)/sizeof(struct Object_t));
 
-			if(score_at_lvl>=30 && score_at_lvl>0)
+			if(enemies_left==0)
 			{
-				frame_time -= 5;
+				frame_time -= frame_time/10;
 				goto start_level;
 			}
 
@@ -325,14 +324,18 @@ void endGame()
 	while(running==TRUE)
 		if(KEY_DOWN_NOW(BUTTON_START) || KEY_DOWN_NOW(BUTTON_SELECT) ) 
 			running = FALSE;
+	
+	sleep(1);
 }
+
 
 int galaga_score()
 {
-	while(1){
+	char buffer[32];
+	while(1)
+	{
 		receive();
- 		sprintf(buffer, "Vidas: %d    Score: %d", lives, score);
-		
+ 		sprintf(buffer, "Vidas: %d    Score: %d        ", lives, score);
 		print_text_on_vga(4, 164, buffer);
 	}
 }
@@ -351,6 +354,8 @@ int galaga()
 
 	kill(pid_game);
 	kill(pid_score);
+
+	drawRect(0, 0, 240, 160, YELLOW);
 
 	return 0;
 }
