@@ -59,6 +59,7 @@ struct ObjectData_t {
 
 enum ObjectState { INACTIVE, ACTIVE, INMUNE = INMUNITY_TIME }; 
 enum ObjectType  { PLAYER, ENEMY_EASY, ENEMY_HARD, ENEMY_BOSS, SHOOT } ;
+enum EventMsg	 { SCORE_UP, STRUCKT, RESET };
 
 const struct ObjectData_t obj_sheet[] = {  
 	/* Type				Sprite		   Width			Height		  Speed       */
@@ -85,24 +86,13 @@ int lives;
 int enemies_left;
 int shoot_decay;
 
-void score_up() 
-{
-	score++;
-	send(pid_score, 0);
-}
 
 void struck(struct Object_t* player, struct Object_t* enemy)
 {
-	if(--lives==0)
-		endGame();
-	else 
-	{
-		score_up();
-		enemies_left--;
-		destroy_obj(enemy);
-		player->state = INMUNE;
-		send(pid_score, 0);
-	}
+	enemies_left--;
+	destroy_obj(enemy);
+	player->state = INMUNE;
+	send(pid_score, STRUCKT);
 }
 
 void destroy_obj(struct Object_t* obj)
@@ -139,6 +129,9 @@ void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, u
 			if (*curr_shoot >= N_SHOOTS)
 				*curr_shoot = 0;
 		};
+	}
+	if (KEY_DOWN_NOW(BUTTON_SELECT)) {
+		running=FALSE;
 	}
 }
 
@@ -245,7 +238,7 @@ void update(struct Object_t* obj, uint32 player_index, uint32 shoots_index, uint
 						enemies_left--;
 					}
 					destroy_obj(&obj[i]);
-					score_up();
+					send(pid_score, SCORE_UP);
 				}
 			}
 			struct ObjectData_t data = obj_sheet[obj[i].type];
@@ -277,8 +270,6 @@ int galaga_game()
 		}
 
 		shoot_decay = 0;
-		score = 0;
-		lives = 3;
 		running = TRUE;
 
 		start_level:
@@ -296,14 +287,16 @@ int galaga_game()
 
 		while(running==TRUE) {
 			//go back to title screen if select button is pressed
-			if (KEY_DOWN_NOW(BUTTON_SELECT))
-				running=FALSE;
 
 			input(objects, 0, N_ENEMIES+1, &curr_shoot);
 			update(objects, 0, N_ENEMIES+1, sizeof(objects)/sizeof(struct Object_t));
 			drawObjects(objects, sizeof(objects)/sizeof(struct Object_t));
 
-			if(enemies_left==0)
+			if(lives==0)
+			{
+				endGame();
+			}
+			else if(enemies_left==0)
 			{
 				frame_time -= frame_time/10;
 				goto start_level;
@@ -311,8 +304,8 @@ int galaga_game()
 
 			sleepms(frame_time);
 		}
+		send(pid_score, RESET);
 	}
-
 	return 0;
 }
 
@@ -321,22 +314,30 @@ void endGame()
 	//start Game Over State
 	drawImage3(0, 0, 240, 160, gameover);
 	drawHollowRect(0, 0, 240, 160, WHITE);
-	send(pid_score, 0);
 
 	while(running==TRUE)
 		if(KEY_DOWN_NOW(BUTTON_START) || KEY_DOWN_NOW(BUTTON_SELECT) ) 
 			running = FALSE;
 	
 	sleep(1);
+	send(pid_score, RESET);
 }
 
 
 int galaga_score()
 {
 	char buffer[32];
+	score = 0;
+	lives = 3;
 	while(1)
 	{
-		receive();
+		switch(receive())
+		{
+			case STRUCKT: lives--;	/* FALLTHROUGH */
+			case SCORE_UP: score++; if(score==100) { lives++; score++; }; break;
+			case RESET: score = 0; lives = 3; break;
+			default: break;
+		}
  		sprintf(buffer, "Vidas: %d    Score: %d        ", lives, score);
 		print_text_on_vga(4, 164, buffer);
 	}
