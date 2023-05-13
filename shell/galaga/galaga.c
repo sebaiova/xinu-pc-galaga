@@ -47,6 +47,8 @@ void drawHollowRect(int x, int y, int width, int height, u16 color);
 void drawHollowRectSize(int x, int y, int width, int height, u16 color, int size);
 void drawImage3(int x, int y, int width, int height, const u16* image);
 
+int check_key(unsigned char); /* /device/kbd/kbdhandler.c */
+
 //helpers
 void endGame();
 
@@ -131,7 +133,7 @@ void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, u
 		{
 			shoot_decay = SHOOT_FREQUENCY;
 			shoot->state = ACTIVE;
-			shoot->x = player->x+(PLAYER_WIDTH/2)-(SHOOT_WIDTH/2); /* 24 widht player */
+			shoot->x = player->x+(PLAYER_WIDTH/2)-(SHOOT_WIDTH/2); 
 			shoot->y = player->y-SHOOT_HEIGHT; 
 			(*curr_shoot)++;
 			if (*curr_shoot >= N_SHOOTS)
@@ -342,7 +344,10 @@ int galaga_score()
 
 int galaga()
 {
-	print_text_on_vga(10, 20, "GALAGA ");
+	print_text_on_vga(260, 16, "GALAGA ");
+	print_text_on_vga(260, 32, "Quit: <ESC> at title");
+	print_text_on_vga(260, 32, "Left <A> - Right <D> - Up <W> - Down <S>");
+	print_text_on_vga(260, 48, "Start <Z> - Select <2> - A <J> - B <K>");
 
 	pid_game = create(galaga_game, 1024, 20, "Galaga Game", 0);
 	pid_score = create(galaga_score, 1024, 20, "Galaga Score", 0);
@@ -356,6 +361,5 @@ int galaga()
 	kill(pid_score);
 
 	drawRect(0, 0, 240, 160, YELLOW);
-
 	return 0;
 }
