@@ -4,7 +4,7 @@
 #include <keyboard.h>
 
 unsigned char kblayout [128];  // { ... } Fill your layout yourself 
-
+struct kbd_state_t kbd_state;
 
 void keyboard_wait(byte a_type) //unsigned char
 {
@@ -50,6 +50,12 @@ devcall	kbdinit (
 		kblayout[i] = i;
 	//keyboard_restart();
 
+	kbd_state.count = 0;
+	kbd_state.head = 0;
+	kbd_state.tail = 0;
+	kbd_state.pr_guest = -1;
+	kbd_state.sem_buffer = semcreate(KBD_BUFFER_SIZE);
+	kbd_state.sem_device = semcreate(1);
 
 	byte _status;  //unsigned char
 

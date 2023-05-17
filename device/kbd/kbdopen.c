@@ -1,6 +1,7 @@
 /* kbdopen.c  -  kbdopen */
 
 #include <xinu.h>
+#include <keyboard.h>
 
 /*------------------------------------------------------------------------
  * kbdopen  -  Open the ps/2 keyboard device
@@ -13,4 +14,6 @@ devcall	kbdopen (
 	 char	*mode			/* Unused for a kbd */
 	)
 {
+	wait(kbd_state.sem_device);
+	kbd_state.pr_guest = currpid;
 }

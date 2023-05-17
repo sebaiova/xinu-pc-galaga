@@ -9,7 +9,10 @@
         "titlescreen.h": "c",
         "boss.h": "c",
         "easyimage.h": "c",
-        "hardimage.h": "c"
+        "hardimage.h": "c",
+        "keyboard.h": "c",
+        "sdmc.h": "c",
+        "rfilesys.h": "c"
     },
     "vsintellicode.typescript.completionsEnabled": false,
     "vsintellicode.sql.completionsEnabled": false,

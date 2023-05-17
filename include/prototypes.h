@@ -618,6 +618,7 @@ extern	interrupt	micehandlerirq(void);
 
 /* in device/kbd* files */
 extern devcall kbdclose ( struct dentry       *devptr);
+extern devcall kbdgetc ( struct dentry       *devptr);
 extern void kbdhandler(void);
 extern devcall kbdinit ( struct dentry        *devptr);
 extern devcall kbdopen ( struct       dentry  *devptr, char   *name, char     *mode);
