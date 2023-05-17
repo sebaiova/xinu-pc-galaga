@@ -12,7 +12,8 @@
         "hardimage.h": "c",
         "keyboard.h": "c",
         "sdmc.h": "c",
-        "rfilesys.h": "c"
+        "rfilesys.h": "c",
+        "tty.h": "c"
     },
     "vsintellicode.typescript.completionsEnabled": false,
     "vsintellicode.sql.completionsEnabled": false,

@@ -6,9 +6,7 @@
 #include "bossImage.h"
 #include "gameover.h"
 #include "shoot.h"
-
-extern unsigned char tecla_actual;
-typedef unsigned short u16;
+#include "joypad.h"
 
 #define COLOR(r,g,b) (b<<11) | (g<<5) | r
 #define BLACK COLOR(0, 0, 0)
@@ -25,7 +23,6 @@ typedef unsigned short u16;
 #define BUTTON_R	'1'
 #define BUTTON_L	'2'
 #define BUTTON_ESC		0x01 /*ESC*/
-#define KEY_DOWN_NOW(key)  (tecla_actual == key)
 
 //variable definitions
 #define PLAYER_SPEED 2
@@ -41,19 +38,17 @@ typedef unsigned short u16;
 #define N_ENEMIES N_EASY+N_HARD+N_BOSS
 #define N_OBJECTS 1+N_SHOOTS+N_ENEMIES
 
-void setPixel(int x, int y, u16 color);
-void drawRect(int x, int y, int width, int height, u16 color);
-void drawHollowRect(int x, int y, int width, int height, u16 color);
-void drawHollowRectSize(int x, int y, int width, int height, u16 color, int size);
-void drawImage3(int x, int y, int width, int height, const u16* image);
-
-int check_key(unsigned char); /* /device/kbd/kbdhandler.c */
+void setPixel(int x, int y, uint16 color);
+void drawRect(int x, int y, int width, int height, uint16 color);
+void drawHollowRect(int x, int y, int width, int height, uint16 color);
+void drawHollowRectSize(int x, int y, int width, int height, uint16 color, int size);
+void drawImage3(int x, int y, int width, int height, const uint16* image);
 
 //helpers
 void endGame();
 
 struct ObjectData_t {
-	const u16* image;
+	const uint16* image;
 	uint8 w, h, speed;
 };
 
@@ -70,7 +65,6 @@ const struct ObjectData_t obj_sheet[] = {
 	/*[SHOOT]*/		{ shootImage,  	SHOOT_WIDTH,	SHOOT_HEIGHT,   SHOOT_SPEED  }
 };
 
-//objects
 struct Object_t {
 	uint8 x, y, type, state;
 };
@@ -85,6 +79,7 @@ int score;
 int lives;
 int enemies_left;
 int shoot_decay;
+
 
 
 void struck(struct Object_t* player, struct Object_t* enemy)
@@ -105,19 +100,19 @@ void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, u
 {
 	struct Object_t* player = &objects[player_index];
 
-	if (check_key(BUTTON_LEFT) && (player->x > 0)) {
+	if (joypad_check(BUTTON_LEFT) && (player->x > 0)) {
 		player->x -= PLAYER_SPEED;
 	}
-	if (check_key(BUTTON_RIGHT) && (player->x <= 216)) {
+	if (joypad_check(BUTTON_RIGHT) && (player->x <= 216)) {
 		player->x += PLAYER_SPEED;
 	}
-	if (check_key(BUTTON_UP) && (player->y > 25)) {
+	if (joypad_check(BUTTON_UP) && (player->y > 25)) {
 		player->y -= PLAYER_SPEED;
 	}
-	if (check_key(BUTTON_DOWN) && (player->y <= 136)) {
+	if (joypad_check(BUTTON_DOWN) && (player->y <= 136)) {
 		player->y += PLAYER_SPEED;
 	}
-	if (check_key(BUTTON_A) && shoot_decay==0) {
+	if (joypad_check(BUTTON_A) && shoot_decay==0) {
 		struct Object_t* shoot = &objects[shoots_index+*curr_shoot]; 
 		if (shoot->state == INACTIVE) 
 		{
@@ -130,7 +125,7 @@ void input(struct Object_t* objects, uint32 player_index, uint32 shoots_index, u
 				*curr_shoot = 0;
 		};
 	}
-	if (KEY_DOWN_NOW(BUTTON_SELECT)) {
+	if (joypad_check(BUTTON_SELECT)) {
 		running=FALSE;
 	}
 }
@@ -261,10 +256,10 @@ int galaga_game()
 		drawImage3(0, 0, 240, 160, titlescreen);
 		while(1) 
 		{
-			if (KEY_DOWN_NOW(BUTTON_START)) {
+			if (joypad_check(BUTTON_START)) {
 				break;
 			}
-			if (KEY_DOWN_NOW(BUTTON_ESC)){
+			if (joypad_check(BUTTON_ESC)){
 				send(pid_control, BUTTON_ESC);
 			} 
 		}
@@ -316,7 +311,7 @@ void endGame()
 	drawHollowRect(0, 0, 240, 160, WHITE);
 
 	while(running==TRUE)
-		if(KEY_DOWN_NOW(BUTTON_START) || KEY_DOWN_NOW(BUTTON_SELECT) ) 
+		if(joypad_check(BUTTON_START) || joypad_check(BUTTON_SELECT) ) 
 			running = FALSE;
 	
 	sleep(1);
@@ -352,12 +347,16 @@ int galaga()
 
 	pid_game = create(galaga_game, 1024, 20, "Galaga Game", 0);
 	pid_score = create(galaga_score, 1024, 20, "Galaga Score", 0);
+
+	joypad_run();
+
 	pid_control = currpid;
 	resume(pid_game);
 	resume(pid_score);
 
 	while(receive()!=BUTTON_ESC);
 
+	joypad_stop();
 	kill(pid_game);
 	kill(pid_score);
 

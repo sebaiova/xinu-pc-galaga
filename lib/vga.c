@@ -16,7 +16,7 @@ typedef struct {
 
 vgaframebuffer_t vga2;
 
-uint32 rgb16_to_rgb32(u16 a)
+uint32 rgb16_to_rgb32(uint16 a)
 {
 /* 1. Extract the red, green and blue values */
 
@@ -50,7 +50,7 @@ return (b << 16) | (g << 8) | r;
 
 
 
-void setPixel(int x, int y, u16 color) {
+void setPixel(int x, int y, uint16 color) {
 	if ((x >= 240) || (y >= 160))
 		return;
 

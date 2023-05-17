@@ -15,5 +15,5 @@ devcall	kbdopen (
 	)
 {
 	wait(kbd_state.sem_device);
-	kbd_state.pr_guest = currpid;
+	kbd_state.pr_guest = getpid();
 }

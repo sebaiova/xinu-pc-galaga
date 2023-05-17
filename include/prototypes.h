@@ -617,6 +617,7 @@ extern devcall micewrite ( struct dentry       *devptr, char *buffer, uint32    
 extern	interrupt	micehandlerirq(void);
 
 /* in device/kbd* files */
+extern devcall kbdcontrol (did32, int32, int32, int32);
 extern devcall kbdclose ( struct dentry       *devptr);
 extern devcall kbdgetc ( struct dentry       *devptr);
 extern void kbdhandler(void);

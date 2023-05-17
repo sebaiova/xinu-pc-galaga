@@ -20,3 +20,6 @@ struct kbd_state_t {
 };
 
 extern struct kbd_state_t kbd_state;
+
+/* kbd control function codes */
+#define	KBD_CLEAR	0		/* Clear buffer	*/

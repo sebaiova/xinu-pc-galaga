@@ -54,7 +54,7 @@ devcall	kbdinit (
 	kbd_state.head = 0;
 	kbd_state.tail = 0;
 	kbd_state.pr_guest = -1;
-	kbd_state.sem_buffer = semcreate(KBD_BUFFER_SIZE);
+	kbd_state.sem_buffer = semcreate(0);
 	kbd_state.sem_device = semcreate(1);
 
 	byte _status;  //unsigned char

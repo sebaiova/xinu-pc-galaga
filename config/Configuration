@@ -109,7 +109,7 @@ kbd:
 	on nothing
 		-i kbdinit	-o kbdopen	-c kbdclose
 		-r kbdread	-g kbdgetc	-p ioerr
-		-w kbdwrite	-s ioerr	-n ioerr
+		-w kbdwrite	-s ioerr	-n kbdcontrol
 		-intr kbdhandlerirq
 		
 /* type of namespace device */

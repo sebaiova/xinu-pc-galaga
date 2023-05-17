@@ -10,8 +10,6 @@ typedef	unsigned int	uint32;
 typedef	unsigned short	uint16;
 typedef	unsigned long long uint64;
 
-/* RAFA for galaga */
-typedef uint16 u16;
 
 /* Xinu-specific types */
 
