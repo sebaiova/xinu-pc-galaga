@@ -20,8 +20,6 @@
 #define BUTTON_LEFT		0x1e /*A*/	
 #define BUTTON_UP		0x11 /*W*/
 #define BUTTON_DOWN 	0x1f /*S*/
-#define BUTTON_R	'1'
-#define BUTTON_L	'2'
 #define BUTTON_ESC		0x01 /*ESC*/
 
 //variable definitions
@@ -43,9 +41,6 @@ void drawRect(int x, int y, int width, int height, uint16 color);
 void drawHollowRect(int x, int y, int width, int height, uint16 color);
 void drawHollowRectSize(int x, int y, int width, int height, uint16 color, int size);
 void drawImage3(int x, int y, int width, int height, const uint16* image);
-
-//helpers
-void endGame();
 
 struct ObjectData_t {
 	const uint16* image;
@@ -79,8 +74,6 @@ int score;
 int lives;
 int enemies_left;
 int shoot_decay;
-
-
 
 void struck(struct Object_t* player, struct Object_t* enemy)
 {
@@ -137,7 +130,7 @@ void drawObjects(struct Object_t* obj, uint32 size)
 		struct ObjectData_t data = obj_sheet[obj[i].type]; 
 		if(obj[i].state>=ACTIVE)
 		{
-			if((obj[i].state%2)==0)
+			if((obj[i].state%2)==0)		/*inmunity flickering*/
 				drawRect(obj[i].x, obj[i].y, data.w, data.h, BLACK);	
 			else 
 				drawImage3(obj[i].x, obj[i].y, data.w, data.h, obj_sheet[obj[i].type].image);
@@ -281,7 +274,6 @@ int galaga_game()
 		}
 
 		while(running==TRUE) {
-			//go back to title screen if select button is pressed
 
 			input(objects, 0, N_ENEMIES+1, &curr_shoot);
 			update(objects, 0, N_ENEMIES+1, sizeof(objects)/sizeof(struct Object_t));
@@ -296,7 +288,6 @@ int galaga_game()
 				frame_time -= frame_time/10;
 				goto start_level;
 			}
-
 			sleepms(frame_time);
 		}
 		send(pid_score, RESET);
@@ -342,13 +333,13 @@ int galaga()
 {
 	print_text_on_vga(260, 16, "GALAGA ");
 	print_text_on_vga(260, 32, "Quit: <ESC> at title");
-	print_text_on_vga(260, 32, "Left <A> - Right <D> - Up <W> - Down <S>");
-	print_text_on_vga(260, 48, "Start <Z> - Select <2> - A <J> - B <K>");
+	print_text_on_vga(260, 48, "Left <A> - Right <D> - Up <W> - Down <S>");
+	print_text_on_vga(260, 64, "Start <Z> - Select <2> - A <J> - B <K>");
 
 	pid_game = create(galaga_game, 1024, 20, "Galaga Game", 0);
 	pid_score = create(galaga_score, 1024, 20, "Galaga Score", 0);
 
-	joypad_run();
+	joypad_run(); /*"./joypad.c"*/
 
 	pid_control = currpid;
 	resume(pid_game);
